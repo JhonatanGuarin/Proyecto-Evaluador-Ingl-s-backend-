@@ -27,3 +27,13 @@ def generate_reset_code(length: int = 6) -> str:
     Genera un código numérico seguro.
     """
     return "".join(secrets.choice(string.digits) for _ in range(length))
+
+
+def create_registration_token(email: str) -> str:
+    """
+    Crea un token JWT especial para finalizar el registro.
+    """
+    expire = datetime.utcnow() + timedelta(hours=1) # Válido por 1 hora
+    to_encode = {"sub": email, "exp": expire, "scope": "registration"}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt

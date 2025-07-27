@@ -22,6 +22,7 @@ class UserBase(BaseModel):
 # Esquema para CREAR un usuario (lo que recibe la API)
 class UserCreate(UserBase):
     password: str
+    registration_token: str
 
     @field_validator('password')
     @classmethod

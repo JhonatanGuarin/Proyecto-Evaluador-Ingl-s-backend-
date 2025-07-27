@@ -3,12 +3,14 @@
 from fastapi import FastAPI, Depends
 from .core.db import engine
 from .users import models as user_models
+from .auth import models as auth_models
 from .auth import routes as auth_routes
 from .users import routes as user_routes
 
 
 # Crea las tablas en la base de datos
 user_models.Base.metadata.create_all(bind=engine)
+auth_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Microservicio de Autenticación",

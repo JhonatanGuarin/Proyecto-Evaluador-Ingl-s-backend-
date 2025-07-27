@@ -2,20 +2,84 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from jose import jwt, JWTError
 
 from ..core import db
-from ..core.email import send_reset_password_email
+from ..core.config import settings
+from ..core.email import send_reset_password_email, send_verification_email
 from ..users import schemas as user_schemas, services as user_services
-from . import schemas as auth_schemas, services as auth_services
+from . import models as auth_models, schemas as auth_schemas, services as auth_services
 
 router = APIRouter()
 
 @router.post("/register", response_model=user_schemas.User)
 def register_user(user: user_schemas.UserCreate, db: Session = Depends(db.get_db)):
+    try:
+        payload = jwt.decode(
+            user.registration_token, 
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM]
+        )
+        if payload.get("scope") != "registration" or payload.get("sub") != user.email:
+            raise HTTPException(status_code=400, detail="Token de registro inválido")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Token de registro inválido o expirado")
+
     db_user = user_services.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
+    
     return user_services.create_user(db=db, user=user)
+
+# --- AÑADIR ESTOS DOS NUEVOS ENDPOINTS ANTES DE /token ---
+
+@router.post("/request-verification")
+async def request_verification(
+    request: auth_schemas.RequestVerificationSchema,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(db.get_db)
+):
+    if user_services.get_user_by_email(db, email=request.email):
+        raise HTTPException(status_code=400, detail="El correo ya está en uso")
+
+    code = auth_services.generate_reset_code()
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    
+    verification_entry = db.query(auth_models.EmailVerification).filter(auth_models.EmailVerification.email == request.email).first()
+    if verification_entry:
+        verification_entry.code = code
+        verification_entry.expires_at = expires_at
+    else:
+        verification_entry = auth_models.EmailVerification(email=request.email, code=code, expires_at=expires_at)
+    
+    db.add(verification_entry)
+    db.commit()
+
+    background_tasks.add_task(send_verification_email, email_to=request.email, verification_code=code)
+    return {"message": "Se ha enviado un código de verificación a tu correo."}
+
+
+@router.post("/verify-code", response_model=auth_schemas.VerificationSuccessSchema)
+def verify_code(request: auth_schemas.VerifyCodeSchema, db: Session = Depends(db.get_db)):
+    verification_entry = db.query(auth_models.EmailVerification).filter(
+        auth_models.EmailVerification.email == request.email,
+        auth_models.EmailVerification.code == request.code
+    ).first()
+
+    if not verification_entry or datetime.utcnow() > verification_entry.expires_at:
+        raise HTTPException(status_code=400, detail="Código inválido o expirado")
+    
+    # El código es válido, genera el token de registro
+    registration_token = auth_services.create_registration_token(email=request.email)
+    
+    # Limpia el código para que no se pueda reusar
+    db.delete(verification_entry)
+    db.commit()
+
+    return {
+        "registration_token": registration_token,
+        "message": "Correo verificado exitosamente. Ahora puedes completar tu registro."
+    }
 
 @router.post("/token", response_model=auth_schemas.Token)
 def login_for_access_token(db: Session = Depends(db.get_db), form_data: OAuth2PasswordRequestForm = Depends()):

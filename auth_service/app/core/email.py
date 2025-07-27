@@ -40,3 +40,27 @@ async def send_reset_password_email(email_to: str, reset_code: str):
 
     fm = FastMail(conf)
     await fm.send_message(message)
+
+
+
+async def send_verification_email(email_to: str, verification_code: str):
+    html_content = f"""
+    <html>
+        <body>
+            <h2>Verificación de Correo</h2>
+            <p>Gracias por registrarte. Usa el siguiente código para verificar tu correo electrónico:</p>
+            <h3 style="font-size: 24px; letter-spacing: 2px;"><b>{verification_code}</b></h3>
+            <p>Este código expirará en 10 minutos.</p>
+        </body>
+    </html>
+    """
+
+    message = MessageSchema(
+        subject="Tu código de verificación",
+        recipients=[email_to],
+        body=html_content,
+        subtype="html"
+    )
+
+    fm = FastMail(conf)
+    await fm.send_message(message)

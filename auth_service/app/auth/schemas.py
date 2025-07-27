@@ -33,3 +33,15 @@ class ResetPasswordSchema(BaseModel):
         if not re.search(r'[@$!%*?&,./]', v):
             raise ValueError('La contraseña debe contener al menos un carácter especial (@$!%*?&,./).')
         return v
+
+
+class RequestVerificationSchema(BaseModel):
+    email: EmailStr
+
+class VerifyCodeSchema(BaseModel):
+    email: EmailStr
+    code: str
+
+class VerificationSuccessSchema(BaseModel):
+    registration_token: str
+    message: str
