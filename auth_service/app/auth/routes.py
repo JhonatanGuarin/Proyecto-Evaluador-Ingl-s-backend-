@@ -9,6 +9,13 @@ from ..core.config import settings
 from ..core.email import send_reset_password_email, send_verification_email
 from ..users import schemas as user_schemas, services as user_services
 from . import models as auth_models, schemas as auth_schemas, services as auth_services
+from fastapi.responses import JSONResponse
+
+from fastapi import Depends
+from .dependencies import get_current_user
+from ..users.models import User
+
+
 
 router = APIRouter()
 
@@ -81,8 +88,12 @@ def verify_code(request: auth_schemas.VerifyCodeSchema, db: Session = Depends(db
         "message": "Correo verificado exitosamente. Ahora puedes completar tu registro."
     }
 
-@router.post("/token", response_model=auth_schemas.Token)
-def login_for_access_token(db: Session = Depends(db.get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+
+@router.post("/token")
+def login_for_access_token(
+    db: Session = Depends(db.get_db),
+    form_data: OAuth2PasswordRequestForm = Depends()
+):
     user = user_services.get_user_by_email(db, email=form_data.username)
     if not user or not auth_services.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -90,13 +101,34 @@ def login_for_access_token(db: Session = Depends(db.get_db), form_data: OAuth2Pa
             detail="Correo o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Crea el token con el email (sub) y el rol
+
     access_token = auth_services.create_access_token(
-        data={"sub": user.email, "rol": user.rol.value} # <-- MODIFICACIÓN CLAVE
+        data={"sub": user.email, "rol": user.rol.value}
     )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    response = JSONResponse(content={"message": "Login exitoso"})
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        secure=True,  # ✅ pon esto en True en producción con HTTPS
+        samesite="Lax",
+        max_age=1800,
+        path="/"
+    )
+    return response
+
+@router.get("/profile")
+def get_profile(current_user: User = Depends(get_current_user)):
+    return {"email": current_user.email}
+
+
+@router.post("/logout")
+def logout():
+    response = JSONResponse(content={"message": "Sesión cerrada"})
+    response.delete_cookie("access_token")
+    return response
+
 
 
 @router.post("/forgot-password")

@@ -6,6 +6,8 @@ from .users import models as user_models
 from .auth import models as auth_models
 from .auth import routes as auth_routes
 from .users import routes as user_routes
+from fastapi.middleware.cors import CORSMiddleware
+
 
 
 # Crea las tablas en la base de datos
@@ -19,6 +21,8 @@ app = FastAPI(
     openapi_version="3.1.0",
     root_path="/auth" 
 )
+
+
 
 # Incluir las rutas de usuarios
 app.include_router(user_routes.router, prefix="/users", tags=["Users"])
