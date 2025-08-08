@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi import Depends
 from .dependencies import get_current_user
 from ..users.models import User
-
+from fastapi import Request
 
 
 router = APIRouter()
@@ -106,7 +106,7 @@ def login_for_access_token(
         data={"sub": user.email, "rol": user.rol.value}
     )
 
-    response = JSONResponse(content={"message": "Login exitoso"})
+    response = JSONResponse(content={"message": "Login exitoso", "token": access_token})
     response.set_cookie(
         key="access_token",
         value=f"Bearer {access_token}",
@@ -124,10 +124,19 @@ def get_profile(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/logout")
-def logout():
+def logout(request: Request):
+    token = request.cookies.get("access_token")
+    print(f"Token que se eliminará: {token}")
     response = JSONResponse(content={"message": "Sesión cerrada"})
-    response.delete_cookie("access_token")
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,
+        secure=True,      # Igual que en login
+        samesite="Lax"    # Igual que en login
+    )
     return response
+
 
 
 
